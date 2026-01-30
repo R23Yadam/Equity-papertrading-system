@@ -16,8 +16,16 @@ public sealed class JsonlLogger : IDisposable
 
     public void Handle(Event evt)
     {
-        var line = JsonSerializer.Serialize(evt, _jsonOptions);
+        var line = JsonSerializer.Serialize(new
+        {
+            id = evt.Id,
+            ts = evt.Ts,
+            type = evt.Type,
+            symbol = evt.Symbol,
+            data = evt.Data
+        }, _jsonOptions);
         _writer.WriteLine(line);
+        _writer.Flush(); // Flush per event so tail can see it immediately.
     }
 
     public void Dispose()

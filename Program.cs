@@ -1,10 +1,22 @@
-using System.Text.Json;
 using TradingSystem;
 
 var bus = new EventBus();
-using var logger = new JsonlLogger("events.log");
+const string logPath = "events.log";
 
-// Wire the logger so every emit is persisted.
+var isReplay = args.Length > 0 &&
+               string.Equals(args[0], "replay", StringComparison.OrdinalIgnoreCase);
+
+if (isReplay)
+{
+    // Avoid writing to the source log while replaying.
+    // Reuse the same bus so handlers see the identical event stream.
+    var replay = new ReplayRunner(bus);
+    replay.Replay(logPath);
+    return;
+}
+
+using var logger = new JsonlLogger(logPath);
+// Persist live events so the log can be replayed deterministically.
 bus.Subscribe(logger.Handle);
 
 var quotes = new[]
@@ -18,27 +30,4 @@ foreach (var quote in quotes)
 {
     var evt = Event.Create("QUOTE", "AAPL", quote);
     bus.Emit(evt);
-}
-
-// Stub: replays persisted events through the same bus.
-static void Replay(EventBus bus, string path)
-{
-    if (!File.Exists(path))
-    {
-        return;
-    }
-
-    foreach (var line in File.ReadLines(path))
-    {
-        if (string.IsNullOrWhiteSpace(line))
-        {
-            continue;
-        }
-
-        var evt = JsonSerializer.Deserialize<Event>(line);
-        if (evt is not null)
-        {
-            bus.Emit(evt);
-        }
-    }
 }
