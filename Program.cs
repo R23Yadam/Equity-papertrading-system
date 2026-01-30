@@ -1,24 +1,31 @@
 using System.Text.Json;
 using TradingSystem;
 
+// CancellationTokenSource enables graceful shutdown via Ctrl+C.
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) =>
+{
+    e.Cancel = true; // Prevent immediate termination.
+    cts.Cancel();
+    Console.WriteLine("Shutting down...");
+};
+
 var bus = new EventBus();
 using var logger = new JsonlLogger("events.log");
 
 // Wire the logger so every emit is persisted.
 bus.Subscribe(logger.Handle);
 
-var quotes = new[]
-{
-    new Dictionary<string, object> { ["price"] = 100.25m, ["size"] = 10 },
-    new Dictionary<string, object> { ["price"] = 100.30m, ["size"] = 12 },
-    new Dictionary<string, object> { ["price"] = 100.10m, ["size"] = 8 },
-};
+// Market data source abstraction allows swapping fake/live/replay sources.
+var symbols = new[] { "AAPL", "MSFT", "GOOGL" };
+IMarketDataSource dataSource = new FakeMarketDataSource(symbols, intervalMs: 500);
 
-foreach (var quote in quotes)
-{
-    var evt = Event.Create("QUOTE", "AAPL", quote);
-    bus.Emit(evt);
-}
+Console.WriteLine("Starting market data feed (Ctrl+C to stop)...");
+
+// Run the data source until cancelled.
+await dataSource.Start(bus, cts.Token);
+
+Console.WriteLine("Market data feed stopped.");
 
 // Stub: replays persisted events through the same bus.
 static void Replay(EventBus bus, string path)
